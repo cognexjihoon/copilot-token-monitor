@@ -126,7 +126,7 @@ class DetailWindow(QDialog):
             f"사용량: {snap.used:,.0f} / {snap.quota:,.0f} credits\n"
             f"영업일 진행: {snap.elapsed_bdays} / {snap.total_bdays}일 "
             f"({(snap.elapsed_bdays / snap.total_bdays * 100 if snap.total_bdays else 0):.1f}%)\n"
-            f"페이스 대비: {snap.pace_ratio * 100:.0f}% (100%보다 크면 예상 소진 속도보다 빠름)"
+            f"페이스 대비: {snap.pace_ratio * 100:.0f}% (100%를 넘으면 예상보다 빨리 쓰고 있다는 뜻)"
         )
         self.warning_label.setText("\n".join(result.warnings))
         self.updated_label.setText(f"마지막 업데이트: {result.last_updated.strftime('%Y-%m-%d %H:%M:%S')}")
