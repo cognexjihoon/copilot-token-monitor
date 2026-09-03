@@ -24,6 +24,13 @@ from ui_detail import DetailWindow
 from ui_settings import SettingsDialog
 from usage_service import RefreshResult, UsageService
 
+# A refresh that's still "in flight" after this long is treated as stuck
+# (e.g. a blocking network call spanning a sleep/wake cycle can wait far
+# past its own requests.get(timeout=...) because the whole process - and
+# the clock that timeout is measured against - was suspended too) rather
+# than trusted to eventually finish on its own.
+WATCHDOG_TIMEOUT_MS = 60_000
+
 
 class RefreshWorker(QObject):
     succeeded = Signal(object)
@@ -52,6 +59,7 @@ class TrayApp:
         self._thread: QThread | None = None
         self._worker: RefreshWorker | None = None
         self._refreshing = False
+        self._watchdog: QTimer | None = None
         self._last_result: RefreshResult | None = None
 
         self.tray = QSystemTrayIcon()
@@ -136,15 +144,50 @@ class TrayApp:
         self._thread.finished.connect(self._on_thread_finished)
         self._thread.start()
 
+        self._watchdog = QTimer()
+        self._watchdog.setSingleShot(True)
+        self._watchdog.timeout.connect(self._on_refresh_watchdog_timeout)
+        self._watchdog.start(WATCHDOG_TIMEOUT_MS)
+
     def _on_thread_finished(self) -> None:
         # _refreshing (not thread.isRunning()) is the in-flight guard so
         # refresh_now() never touches the QThread object again here - a
         # dangling Python reference read after deleteLater() actually runs
         # (e.g. during a settings dialog's nested event loop) raised
         # "QThread object already deleted".
+        if self._watchdog is not None:
+            self._watchdog.stop()
+            self._watchdog = None
         self._refreshing = False
         self._thread = None
         self._worker = None
+
+    def _on_refresh_watchdog_timeout(self) -> None:
+        # The worker thread never finished within WATCHDOG_TIMEOUT_MS -
+        # stop waiting on it instead of leaving _refreshing stuck True
+        # forever (which would silently no-op every future refresh_now()
+        # call, timer-driven or manual, with no visible error at all).
+        # Disconnect our own slots first so if the stuck call eventually
+        # does complete, it can't clobber state for whatever refresh runs
+        # next; deleteLater() stays connected so Qt still cleans it up.
+        if self._worker is not None:
+            try:
+                self._worker.succeeded.disconnect(self._on_refresh_succeeded)
+                self._worker.failed.disconnect(self._on_refresh_failed)
+            except (RuntimeError, TypeError):
+                pass
+        if self._thread is not None:
+            try:
+                self._thread.finished.disconnect(self._on_thread_finished)
+            except (RuntimeError, TypeError):
+                pass
+        self._watchdog = None
+        self._thread = None
+        self._worker = None
+        self._refreshing = False
+        self._on_refresh_failed(
+            "새로고침이 응답 없이 멈춰서 건너뜁니다 (네트워크/절전 문제로 추정). 다음 주기 또는 수동 새로고침에서 다시 시도합니다."
+        )
 
     def _on_refresh_succeeded(self, result: RefreshResult) -> None:
         self._last_result = result
