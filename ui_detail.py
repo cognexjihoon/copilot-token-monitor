@@ -26,7 +26,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
-from usage_calc import business_days_in_month
+from usage_calc import business_days_in_month, elapsed_business_days
 from usage_service import RefreshResult
 
 
@@ -151,13 +151,18 @@ class DetailWindow(QDialog):
             running += value
             cumulative.append(running)
 
-        xs = list(range(1, len(series) + 1))
-        ax.bar(xs, [v for _, v in series], color="#95a5a6", alpha=0.5, label="일별 사용량")
+        # x must be each entry's actual elapsed-business-day-of-month, not
+        # its position in the (possibly gapped, e.g. app not open every
+        # day) cache list -- otherwise this drifts left of where the ideal
+        # pace line expects it, making cumulative usage look far ahead of
+        # pace even when it's only marginally so.
+        xs = [elapsed_business_days(d.year, d.month, d) for d, _ in series]
+        ax.bar(xs, [v for _, v in series], color="#95a5a6", alpha=0.5, label="일별 사용량", width=0.6)
         ax.plot(xs, cumulative, color=snap.color, marker="o", linewidth=2, label="누적 사용량")
 
         if total_bdays > 0 and snap.quota > 0:
-            pace_xs = [1, total_bdays]
-            pace_ys = [snap.quota / total_bdays, snap.quota]
+            pace_xs = [0, total_bdays]
+            pace_ys = [0, snap.quota]
             ax.plot(pace_xs, pace_ys, color="#7f8c8d", linestyle="--", label="이상적 페이스")
 
         ax.set_xlabel("영업일 경과")
