@@ -2,9 +2,12 @@
 shipping image assets."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import QPointF, Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap
 
+# Drawn well above the ~16-32px a Windows tray icon actually renders at, so
+# Qt's downscale has room to antialias cleanly; raising this further has no
+# visible effect since the OS caps the displayed size regardless.
 SIZE = 64
 _MARGIN = 1  # just enough room for the antialiased edge, badge fills the rest
 _INNER = SIZE - 2 * _MARGIN
@@ -15,7 +18,7 @@ _INNER = SIZE - 2 * _MARGIN
 _CORNER_RADIUS = _INNER * 0.18
 # unlike fitting inside a circle (which needs a diagonal check), a
 # rectangle's width/height can be checked independently against a square.
-_TEXT_FIT_FACTOR = 0.88
+_TEXT_FIT_FACTOR = 0.94
 _TEXT_COLOR = QColor("#000000")
 
 
@@ -44,9 +47,19 @@ def _draw_badge(color: str, text: str) -> QIcon:
     painter.setPen(Qt.NoPen)
     painter.drawRoundedRect(QRectF(_MARGIN, _MARGIN, _INNER, _INNER), _CORNER_RADIUS, _CORNER_RADIUS)
 
-    painter.setFont(_max_fitting_font(text))
+    font = _max_fitting_font(text)
+    painter.setFont(font)
     painter.setPen(_TEXT_COLOR)
-    painter.drawText(QRectF(0, 0, SIZE, SIZE), Qt.AlignCenter, text)
+
+    # Qt.AlignCenter centers the font's *line box* (ascent+descent), not
+    # the glyphs' actual ink - digits have no descender ink, so that left
+    # the number looking off-center (reported: sitting toward the bottom).
+    # Center the tight ink bounding box itself instead, which is accurate
+    # regardless of the active font's metrics.
+    ink = QFontMetrics(font).tightBoundingRect(text)
+    x = SIZE / 2 - ink.width() / 2 - ink.left()
+    y = SIZE / 2 - ink.height() / 2 - ink.top()
+    painter.drawText(QPointF(x, y), text)
 
     painter.end()
     return QIcon(pixmap)
