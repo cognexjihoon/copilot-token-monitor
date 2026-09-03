@@ -83,17 +83,30 @@ def test_pace_ratio_on_pace():
     assert snap.pace_ratio == pytest.approx(0.5)
 
 
-def test_status_margin_within_tolerance():
-    # expected = 10000, used = 10400 -> ratio 1.04 <= 1.05 tolerance
-    snap = UsageSnapshot(used=10400, quota=20000, elapsed_bdays=10, total_bdays=20)
+def test_status_margin_at_or_below_80pct_of_pace():
+    # expected = 10000, used = 8000 -> ratio 0.80 <= 0.80 margin threshold
+    snap = UsageSnapshot(used=8000, quota=20000, elapsed_bdays=10, total_bdays=20)
     assert snap.status == Status.MARGIN
     assert snap.color == "#2ecc71"
     assert snap.label == "여유"
 
 
-def test_status_warning_beyond_tolerance():
-    # expected = 10000, used = 11000 -> ratio 1.1 > 1.05 tolerance
-    snap = UsageSnapshot(used=11000, quota=20000, elapsed_bdays=10, total_bdays=20)
+def test_status_on_track_between_80_and_100pct_of_pace():
+    # expected = 10000, used = 9500 -> ratio 0.95, between margin and warning
+    snap = UsageSnapshot(used=9500, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.ON_TRACK
+    assert snap.color == "#3498db"
+    assert snap.label == "적정"
+
+
+def test_status_on_track_at_exactly_100pct_of_pace():
+    snap = UsageSnapshot(used=10000, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.ON_TRACK
+
+
+def test_status_warning_above_100pct_of_pace():
+    # expected = 10000, used = 10400 -> ratio 1.04, ahead of ideal pace
+    snap = UsageSnapshot(used=10400, quota=20000, elapsed_bdays=10, total_bdays=20)
     assert snap.status == Status.WARNING
     assert snap.label == "주의"
 

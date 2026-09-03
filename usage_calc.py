@@ -24,23 +24,30 @@ def elapsed_business_days(year: int, month: int, as_of: date) -> int:
 
 class Status(Enum):
     MARGIN = "margin"      # 여유
-    WARNING = "warning"    # 적당(페이스 초과 주의)
+    ON_TRACK = "on_track"  # 적정
+    WARNING = "warning"    # 주의
     EXCEEDED = "exceeded"  # 초과
 
 
 STATUS_LABEL = {
     Status.MARGIN: "여유",
+    Status.ON_TRACK: "적정",
     Status.WARNING: "주의",
     Status.EXCEEDED: "초과",
 }
 
 STATUS_COLOR = {
     Status.MARGIN: "#2ecc71",
+    Status.ON_TRACK: "#3498db",
     Status.WARNING: "#f1c40f",
     Status.EXCEEDED: "#e74c3c",
 }
 
-PACE_TOLERANCE = 1.05  # 5% slack before flagging as ahead-of-pace
+# pace_ratio thresholds: at/below MARGIN is comfortably behind the ideal
+# pace, between MARGIN and WARNING is on track, above WARNING is ahead of
+# the ideal pace.
+PACE_MARGIN_THRESHOLD = 0.80
+PACE_WARNING_THRESHOLD = 1.00
 
 
 @dataclass
@@ -71,8 +78,10 @@ class UsageSnapshot:
     def status(self) -> Status:
         if self.quota > 0 and self.used >= self.quota:
             return Status.EXCEEDED
-        if self.pace_ratio <= PACE_TOLERANCE:
+        if self.pace_ratio <= PACE_MARGIN_THRESHOLD:
             return Status.MARGIN
+        if self.pace_ratio <= PACE_WARNING_THRESHOLD:
+            return Status.ON_TRACK
         return Status.WARNING
 
     @property

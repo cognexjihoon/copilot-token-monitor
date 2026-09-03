@@ -46,6 +46,7 @@ class DetailWindow(QDialog):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setTextVisible(True)
+        self.progress.setAlignment(Qt.AlignCenter)
 
         self.detail_label = QLabel("")
         self.detail_label.setWordWrap(True)
