@@ -47,8 +47,9 @@ class AppConfig:
     endpoint_kind: str = "ai_credit"  # "ai_credit" or "premium_request"
     username: str = ""
     org: str = ""
+    enterprise: str = ""  # used when quota_source == "budget_api"
     monthly_quota: float = 20000.0  # used when quota_source == "manual"
-    quota_source: str = "manual"  # "manual" or "scrape"
+    quota_source: str = "manual"  # "manual", "budget_api", or "scrape"
     poll_interval_min: int = 30
     _token_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
     _cookie_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
@@ -78,6 +79,7 @@ class AppConfig:
             endpoint_kind=data.get("endpoint_kind", "ai_credit"),
             username=data.get("username", ""),
             org=data.get("org", ""),
+            enterprise=data.get("enterprise", ""),
             monthly_quota=float(data.get("monthly_quota", 20000.0)),
             quota_source=data.get("quota_source", "manual"),
             poll_interval_min=int(data.get("poll_interval_min", 30)),
@@ -101,6 +103,3 @@ class AppConfig:
         if self.auth_mode == "org" and not self.org:
             return False
         return True
-
-    def scrape_ready(self) -> bool:
-        return self.quota_source == "scrape" and bool(self._cookie_plain)

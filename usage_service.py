@@ -46,7 +46,15 @@ class UsageService:
         used = month_result.net_quantity
 
         quota = cfg.monthly_quota
-        if cfg.quota_source == "scrape":
+        if cfg.quota_source == "budget_api":
+            if cfg.enterprise:
+                try:
+                    quota = client.get_budget_amount(cfg.enterprise)
+                except GitHubApiError as exc:
+                    warnings.append(f"Budget API 조회 실패, 마지막 저장값({cfg.monthly_quota:g}) 사용: {exc}")
+            else:
+                warnings.append("Budget API 사용이 켜져 있지만 엔터프라이즈명이 없습니다. 설정에서 입력하세요.")
+        elif cfg.quota_source == "scrape":
             if cfg.cookie():
                 try:
                     scraped = fetch_quota(cfg.cookie())

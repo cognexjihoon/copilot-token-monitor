@@ -22,7 +22,11 @@ from scrape_client import ScrapeError, fetch_quota
 
 AUTH_MODES = [("개인 계정 (user)", "user"), ("조직 (organization)", "org")]
 ENDPOINT_KINDS = [("AI Credit (2026~ 신규 과금)", "ai_credit"), ("Premium Request (레거시)", "premium_request")]
-QUOTA_SOURCES = [("수동 입력", "manual"), ("GitHub 페이지에서 자동 감지 (쿠키 필요)", "scrape")]
+QUOTA_SOURCES = [
+    ("수동 입력", "manual"),
+    ("Budget API (PAT, 관리자 권한 필요, 쿠키 불필요)", "budget_api"),
+    ("GitHub 페이지에서 자동 감지 (쿠키 필요)", "scrape"),
+]
 
 
 class SettingsDialog(QDialog):
@@ -63,6 +67,9 @@ class SettingsDialog(QDialog):
         self.cookie_edit.setEchoMode(QLineEdit.Password)
         self.cookie_edit.setPlaceholderText("브라우저 DevTools > Network 에서 복사한 Cookie 헤더 값 전체")
 
+        self.enterprise_edit = QLineEdit(config.enterprise)
+        self.enterprise_edit.setPlaceholderText("엔터프라이즈 slug (Budget API 사용 시 필요)")
+
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(5, 240)
         self.interval_spin.setSuffix(" 분")
@@ -80,6 +87,14 @@ class SettingsDialog(QDialog):
         cookie_help.setWordWrap(True)
         cookie_help.setStyleSheet("color: gray; font-size: 11px;")
 
+        budget_help = QLabel(
+            "Budget API 사용 조건: 토큰 소유자가 해당 엔터프라이즈의 관리자/billing manager여야 하고, "
+            "관리자가 이 사용자에게 개별 AI credit budget을 설정해 두었어야 합니다. "
+            "필요 스코프 예: manage_billing:enterprise, read:enterprise (classic PAT)."
+        )
+        budget_help.setWordWrap(True)
+        budget_help.setStyleSheet("color: gray; font-size: 11px;")
+
         form = QFormLayout()
         form.addRow("계정 종류", self.auth_mode_box)
         form.addRow("조직명", self.org_edit)
@@ -87,7 +102,9 @@ class SettingsDialog(QDialog):
         form.addRow("GitHub 사용자명", self.username_edit)
         form.addRow("Personal Access Token", self.token_edit)
         form.addRow("월 한도(쿼터) 소스", self.quota_source_box)
-        form.addRow("월 한도(수동)", self.quota_spin)
+        form.addRow("월 한도(수동/폴백)", self.quota_spin)
+        form.addRow("엔터프라이즈 slug", self.enterprise_edit)
+        form.addRow("", budget_help)
         form.addRow("세션 쿠키", self.cookie_edit)
         form.addRow("", cookie_help)
         form.addRow("확인 주기", self.interval_spin)
@@ -120,9 +137,9 @@ class SettingsDialog(QDialog):
     def _sync_enabled(self) -> None:
         is_org = AUTH_MODES[self.auth_mode_box.currentIndex()][1] == "org"
         self.org_edit.setEnabled(is_org)
-        is_scrape = QUOTA_SOURCES[self.quota_source_box.currentIndex()][1] == "scrape"
-        self.cookie_edit.setEnabled(is_scrape)
-        self.quota_spin.setEnabled(not is_scrape or True)  # manual value kept as fallback either way
+        quota_source = QUOTA_SOURCES[self.quota_source_box.currentIndex()][1]
+        self.cookie_edit.setEnabled(quota_source == "scrape")
+        self.enterprise_edit.setEnabled(quota_source == "budget_api")
 
     def _apply_to(self, cfg: AppConfig) -> None:
         cfg.auth_mode = AUTH_MODES[self.auth_mode_box.currentIndex()][1]
@@ -132,6 +149,7 @@ class SettingsDialog(QDialog):
         cfg.set_token(self.token_edit.text().strip())
         cfg.quota_source = QUOTA_SOURCES[self.quota_source_box.currentIndex()][1]
         cfg.monthly_quota = self.quota_spin.value()
+        cfg.enterprise = self.enterprise_edit.text().strip()
         cfg.set_cookie(self.cookie_edit.text().strip())
         cfg.poll_interval_min = self.interval_spin.value()
 
@@ -152,7 +170,13 @@ class SettingsDialog(QDialog):
         today = date.today()
         ok, message = client.test_connection(today.year, today.month)
 
-        if temp.quota_source == "scrape" and temp.cookie():
+        if temp.quota_source == "budget_api" and temp.enterprise:
+            try:
+                amount = client.get_budget_amount(temp.enterprise)
+                message += f"\nBudget API 조회 성공: {amount:g} credits"
+            except GitHubApiError as exc:
+                message += f"\nBudget API 조회 실패: {exc}"
+        elif temp.quota_source == "scrape" and temp.cookie():
             try:
                 scraped = fetch_quota(temp.cookie())
                 message += f"\n쿼터 자동 감지 성공: {scraped.used:g} / {scraped.quota:g}"

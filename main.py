@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from config import AppConfig
@@ -151,6 +151,13 @@ class TrayApp:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    # Qt's default font fallback for Hangul glyphs resolves to the legacy
+    # "Gulim" bitmap font on Windows instead of the modern Malgun Gothic;
+    # pin it explicitly so dialogs/menus render correctly.
+    ui_font = QFont()
+    ui_font.setFamilies(["Malgun Gothic", "Segoe UI"])
+    app.setFont(ui_font)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "오류", "시스템 트레이를 사용할 수 없는 환경입니다.")
