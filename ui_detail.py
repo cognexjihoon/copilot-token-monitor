@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import sys
 from datetime import date
 
 import matplotlib
 
 matplotlib.use("QtAgg")
-# Windows ships "Malgun Gothic" by default; DejaVu Sans (matplotlib's
-# default) has no Hangul glyphs and silently renders them as tofu boxes.
-matplotlib.rcParams["font.family"] = ["Malgun Gothic", "AppleGothic", "NanumGothic", "sans-serif"]
+# DejaVu Sans (matplotlib's default) has no Hangul glyphs and silently
+# renders them as tofu boxes, so pick the font each OS actually ships with
+# Korean coverage. Listing all three unconditionally made matplotlib log a
+# "not found" warning per platform-inappropriate name (e.g. AppleGothic on
+# Windows, Malgun Gothic on macOS).
+if sys.platform == "win32":
+    _korean_font = "Malgun Gothic"
+elif sys.platform == "darwin":
+    _korean_font = "Apple SD Gothic Neo"
+else:
+    _korean_font = "NanumGothic"
+matplotlib.rcParams["font.family"] = [_korean_font, "sans-serif"]
 matplotlib.rcParams["axes.unicode_minus"] = False
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
