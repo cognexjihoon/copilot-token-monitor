@@ -1,39 +1,67 @@
-"""Draws the tray icon on the fly (colored badge + percentage) instead of
-shipping image assets."""
+"""Draws the tray icon on the fly (a status-colored ring + percentage,
+transparent inside) instead of shipping image assets."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt, QRectF
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 
 # Drawn well above the ~16-32px a Windows tray icon actually renders at, so
 # Qt's downscale has room to antialias cleanly; raising this further has no
 # visible effect since the OS caps the displayed size regardless.
 SIZE = 64
-_MARGIN = 1  # just enough room for the antialiased edge, badge fills the rest
+_MARGIN = 1  # just enough room for the antialiased edge, ring fills the rest
 _INNER = SIZE - 2 * _MARGIN
 # a slightly rounded square instead of a circle: a circle inscribed in a
 # square only covers ~79% of its area (pi/4), so at the same canvas size a
-# rounded square lets the glyph be noticeably bigger - the readability the
-# user asked for outweighs a perfectly round badge look.
+# rounded square lets the glyph be noticeably bigger.
 _CORNER_RADIUS = _INNER * 0.18
-# unlike fitting inside a circle (which needs a diagonal check), a
-# rectangle's width/height can be checked independently against a square.
-_TEXT_FIT_FACTOR = 0.90
-_TEXT_FILL = QColor("#000000")
-_TEXT_OUTLINE = QColor("#ffffff")
-_OUTLINE_WIDTH = 3.0
-# black digits read fine against every status color except the mid-brightness
-# blue "on track" tier - measuring it, its perceived brightness sits almost
-# exactly on the black/white text crossover point, so *neither* pure color
-# has strong contrast there. A white outline around black fill reads clearly
-# against every badge color instead of picking per-color text colors.
+_RING_WIDTH = 5.5
+# A solid-filled badge meant the digit's readability depended on that one
+# status color's contrast (poor for the mid-brightness "on track" blue). A
+# transparent interior instead blends with the taskbar itself - the same
+# reason the system clock/IME indicator text reads clearly regardless of
+# color - with only a status-colored ring around the edge for at-a-glance
+# color coding.
+_TEXT_FIT_FACTOR = 0.82
+
+
+def _system_is_dark() -> bool:
+    """Best-effort dark/light taskbar detection so the digit (drawn on a
+    transparent background, no fill of its own for contrast) picks a color
+    that actually shows up against it."""
+    app = QGuiApplication.instance()
+    if app is None:
+        return True  # Windows 11 defaults to a dark taskbar
+    try:
+        from PySide6.QtCore import Qt as _Qt
+
+        scheme = app.styleHints().colorScheme()
+        if scheme == _Qt.ColorScheme.Dark:
+            return True
+        if scheme == _Qt.ColorScheme.Light:
+            return False
+    except AttributeError:
+        pass  # colorScheme() needs Qt 6.5+
+    window_color = app.palette().window().color()
+    luminance = 0.2126 * window_color.redF() + 0.7152 * window_color.greenF() + 0.0722 * window_color.blueF()
+    return luminance < 0.5
 
 
 def _max_fitting_font(text: str) -> QFont:
     """Largest bold point size whose tight bounding box still fits inside
-    the badge (leaving room for the outline stroke), so 1-, 2-digit and
-    "!"/"?" glyphs are all drawn as big as possible."""
-    limit = _INNER * _TEXT_FIT_FACTOR - _OUTLINE_WIDTH
+    the ring, so 1-, 2-digit and "!"/"?" glyphs are all drawn as big as
+    possible."""
+    limit = (_INNER - 2 * _RING_WIDTH) * _TEXT_FIT_FACTOR
     font = QFont("Segoe UI", 1, QFont.Bold)
     for size in range(72, 5, -1):
         font.setPointSize(size)
@@ -50,25 +78,30 @@ def _draw_badge(color: str, text: str) -> QIcon:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
 
-    painter.setBrush(QColor(color))
-    painter.setPen(Qt.NoPen)
-    painter.drawRoundedRect(QRectF(_MARGIN, _MARGIN, _INNER, _INNER), _CORNER_RADIUS, _CORNER_RADIUS)
+    painter.setPen(QPen(QColor(color), _RING_WIDTH))
+    painter.setBrush(Qt.NoBrush)
+    ring_inset = _RING_WIDTH / 2
+    painter.drawRoundedRect(
+        QRectF(_MARGIN + ring_inset, _MARGIN + ring_inset, _INNER - _RING_WIDTH, _INNER - _RING_WIDTH),
+        _CORNER_RADIUS,
+        _CORNER_RADIUS,
+    )
 
     font = _max_fitting_font(text)
+    text_color = QColor("#ffffff") if _system_is_dark() else QColor("#000000")
 
     # Qt.AlignCenter centers the font's *line box* (ascent+descent), not
     # the glyphs' actual ink - digits have no descender ink, so that left
-    # the number looking off-center (reported: sitting toward the bottom).
-    # Center the tight ink bounding box itself instead, which is accurate
-    # regardless of the active font's metrics.
+    # the number looking off-center. Center the tight ink bounding box
+    # itself instead, which is accurate regardless of the active font.
     ink = QFontMetrics(font).tightBoundingRect(text)
     x = SIZE / 2 - ink.width() / 2 - ink.left()
     y = SIZE / 2 - ink.height() / 2 - ink.top()
 
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(text_color)
     path = QPainterPath()
     path.addText(QPointF(x, y), font, text)
-    painter.setPen(QPen(_TEXT_OUTLINE, _OUTLINE_WIDTH))
-    painter.setBrush(_TEXT_FILL)
     painter.drawPath(path)
 
     painter.end()
