@@ -19,11 +19,13 @@ _INNER = SIZE - 2 * _MARGIN
 _TEXT_FIT_FACTOR = 0.94
 # Same hue as the status color, but relit for the current theme - straight
 # status-color-on-transparent read fine on Windows 11's default dark
-# taskbar, but several status colors (yellow, green) drop to ~1.6-2:1
-# contrast against a *light* taskbar, well below legible. Keeping the hue
-# preserves the at-a-glance color coding; only lightness changes per theme.
+# taskbar, but drops to poor contrast against a *light* one. An earlier,
+# more conservative light-theme lightness (0.32) fixed contrast on paper
+# but turned yellow into a muddy olive/mustard and dulled the others -
+# 0.54 keeps every color reading as itself (still visibly brighter than
+# the dark-theme value) while staying legible.
 _DARK_THEME_LIGHTNESS = 0.62
-_LIGHT_THEME_LIGHTNESS = 0.32
+_LIGHT_THEME_LIGHTNESS = 0.54
 
 
 def _system_is_dark() -> bool:
