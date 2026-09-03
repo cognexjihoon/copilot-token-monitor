@@ -23,10 +23,35 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
 from usage_calc import business_days_in_month
 from usage_service import RefreshResult
+
+
+class PercentProgressBar(QProgressBar):
+    """Draws the "N%" label centered within the filled chunk only, instead
+    of Qt's default of centering it across the whole (mostly empty at low
+    values) bar."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setTextVisible(False)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        span = max(1, self.maximum() - self.minimum())
+        chunk_width = round(self.width() * (self.value() - self.minimum()) / span)
+        if chunk_width <= 0:
+            return
+        rect = self.rect()
+        rect.setWidth(chunk_width)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.black)
+        painter.drawText(rect, Qt.AlignCenter, f"{self.value()}%")
+        painter.end()
 
 
 class DetailWindow(QDialog):
@@ -43,10 +68,8 @@ class DetailWindow(QDialog):
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setStyleSheet("font-size: 16px;")
 
-        self.progress = QProgressBar()
+        self.progress = PercentProgressBar()
         self.progress.setRange(0, 100)
-        self.progress.setTextVisible(True)
-        self.progress.setAlignment(Qt.AlignCenter)
 
         self.detail_label = QLabel("")
         self.detail_label.setWordWrap(True)
