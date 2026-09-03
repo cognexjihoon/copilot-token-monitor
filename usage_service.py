@@ -1,5 +1,14 @@
-"""Ties together the billing API, the optional quota scraper, and the local
-daily cache to produce one refreshed snapshot + trend series per poll."""
+"""Ties together the billing-page scraper and the local daily cache to
+produce one refreshed snapshot + trend series per poll.
+
+GitHub's billing REST API requires the token holder to be an organization
+admin/owner to read another member's usage, which most users are not. So
+usage and quota are both obtained by scraping the rendered
+github.com/settings/billing page using the user's own session cookie
+(see scrape_client.py) - the same numbers the user would see by hand,
+just automated. `monthly_quota` in config is only a fallback used when the
+scrape fails to parse a quota value.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,9 +16,8 @@ from datetime import date, datetime
 from typing import List, Tuple
 
 from config import AppConfig
-from github_client import CopilotUsageClient, GitHubApiError
 from scrape_client import ScrapeError, fetch_quota
-from usage_calc import UsageSnapshot, business_days_in_month, elapsed_business_days, is_business_day
+from usage_calc import UsageSnapshot, business_days_in_month, elapsed_business_days
 from usage_cache import load_cache, save_cache, set_day
 
 
@@ -28,47 +36,23 @@ class UsageService:
     def refresh(self) -> RefreshResult:
         cfg = self.config
         if not cfg.is_valid():
-            raise GitHubApiError("설정이 완료되지 않았습니다. 설정 창에서 토큰/사용자명을 입력하세요.")
-
-        client = CopilotUsageClient(
-            token=cfg.token(),
-            username=cfg.username,
-            org=cfg.org,
-            auth_mode=cfg.auth_mode,
-            endpoint_kind=cfg.endpoint_kind,
-        )
+            raise ScrapeError("설정이 완료되지 않았습니다. 설정 창에서 GitHub 로그인을 진행하세요.")
 
         today = date.today()
         year, month = today.year, today.month
         warnings: List[str] = []
 
-        month_result = client.get_month_total(year, month)
-        used = month_result.net_quantity
-
-        quota = cfg.monthly_quota
-        if cfg.quota_source == "budget_api":
-            if cfg.enterprise:
-                try:
-                    quota = client.get_budget_amount(cfg.enterprise)
-                except GitHubApiError as exc:
-                    warnings.append(f"Budget API 조회 실패, 마지막 저장값({cfg.monthly_quota:g}) 사용: {exc}")
-            else:
-                warnings.append("Budget API 사용이 켜져 있지만 엔터프라이즈명이 없습니다. 설정에서 입력하세요.")
-        elif cfg.quota_source == "scrape":
-            if cfg.cookie():
-                try:
-                    scraped = fetch_quota(cfg.cookie())
-                    quota = scraped.quota
-                except ScrapeError as exc:
-                    warnings.append(f"쿼터 자동 감지 실패, 마지막 저장값({cfg.monthly_quota:g}) 사용: {exc}")
-            else:
-                warnings.append("쿼터 자동 감지가 켜져 있지만 세션 쿠키가 없습니다. 설정에서 입력하세요.")
+        scraped = fetch_quota(cfg.cookie())
+        used = scraped.used
+        quota = scraped.quota if scraped.quota > 0 else cfg.monthly_quota
+        if scraped.quota <= 0:
+            warnings.append(f"페이지에서 쿼터를 읽지 못해 저장된 값({cfg.monthly_quota:g})을 사용합니다.")
 
         total_bdays = business_days_in_month(year, month)
         elapsed_bdays = elapsed_business_days(year, month, today)
         snapshot = UsageSnapshot(used=used, quota=quota, elapsed_bdays=elapsed_bdays, total_bdays=total_bdays)
 
-        daily_series = self._refresh_daily_series(client, year, month, today, warnings)
+        daily_series = self._update_daily_cache(year, month, today, used)
 
         return RefreshResult(
             snapshot=snapshot,
@@ -77,28 +61,25 @@ class UsageService:
             warnings=warnings,
         )
 
-    def _refresh_daily_series(
-        self, client: CopilotUsageClient, year: int, month: int, today: date, warnings: List[str]
+    def _update_daily_cache(
+        self, year: int, month: int, today: date, used_month_to_date: float
     ) -> List[Tuple[date, float]]:
+        """The scraper only reports a cumulative month-to-date total (no
+        per-day breakdown), so today's cumulative reading is cached and the
+        per-day trend is derived as the delta between consecutive cached
+        cumulative readings within the month."""
         cache = load_cache()
-        for day in range(1, today.day + 1):
-            d = date(year, month, day)
-            if not is_business_day(d):
-                continue
-            iso = d.isoformat()
-            if iso in cache and day != today.day:
-                continue  # past days don't change once cached; today is always refetched
-            try:
-                result = client.get_day_total(year, month, day)
-                set_day(cache, iso, result.net_quantity)
-            except GitHubApiError as exc:
-                if iso not in cache:
-                    warnings.append(f"{iso} 사용량 조회 실패: {exc}")
+        set_day(cache, today.isoformat(), used_month_to_date)
         save_cache(cache)
 
         prefix = f"{year:04d}-{month:02d}-"
-        series = [
-            (date.fromisoformat(iso), value) for iso, value in cache.items() if iso.startswith(prefix)
-        ]
-        series.sort(key=lambda pair: pair[0])
+        month_days = sorted(
+            (iso, value) for iso, value in cache.items() if iso.startswith(prefix)
+        )
+
+        series: List[Tuple[date, float]] = []
+        previous_cumulative = 0.0
+        for iso, cumulative in month_days:
+            series.append((date.fromisoformat(iso), cumulative - previous_cumulative))
+            previous_cumulative = cumulative
         return series

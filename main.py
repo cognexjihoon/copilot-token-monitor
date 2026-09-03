@@ -9,8 +9,8 @@ from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from config import AppConfig
-from github_client import GitHubApiError
 from icon_factory import make_error_icon, make_icon
+from scrape_client import ScrapeError
 from ui_detail import DetailWindow
 from ui_settings import SettingsDialog
 from usage_service import RefreshResult, UsageService
@@ -27,7 +27,7 @@ class RefreshWorker(QObject):
     def run(self) -> None:
         try:
             result = self.service.refresh()
-        except GitHubApiError as exc:
+        except ScrapeError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:  # unexpected errors must not silently kill the poll loop
             self.failed.emit(f"예상치 못한 오류: {exc}")

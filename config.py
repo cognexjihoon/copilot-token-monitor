@@ -1,4 +1,5 @@
-"""Application configuration: load/save + Windows DPAPI encryption of the PAT."""
+"""Application configuration: load/save + Windows DPAPI encryption of the
+session cookie."""
 from __future__ import annotations
 
 import base64
@@ -19,13 +20,13 @@ CONFIG_PATH = APP_DIR / "config.json"
 CACHE_PATH = APP_DIR / "usage_cache.json"
 
 
-def _encrypt(token: str) -> str:
-    if not token:
+def _encrypt(value: str) -> str:
+    if not value:
         return ""
     if _HAS_DPAPI:
-        blob = win32crypt.CryptProtectData(token.encode("utf-8"), "CopilotUsageMonitor", None, None, None, 0)
+        blob = win32crypt.CryptProtectData(value.encode("utf-8"), "CopilotUsageMonitor", None, None, None, 0)
         return "dpapi:" + base64.b64encode(blob).decode("ascii")
-    return "plain:" + token
+    return "plain:" + value
 
 
 def _decrypt(stored: str) -> str:
@@ -43,22 +44,9 @@ def _decrypt(stored: str) -> str:
 
 @dataclass
 class AppConfig:
-    auth_mode: str = "user"  # "user" or "org"
-    endpoint_kind: str = "ai_credit"  # "ai_credit" or "premium_request"
-    username: str = ""
-    org: str = ""
-    enterprise: str = ""  # used when quota_source == "budget_api"
-    monthly_quota: float = 20000.0  # used when quota_source == "manual"
-    quota_source: str = "manual"  # "manual", "budget_api", or "scrape"
+    monthly_quota: float = 20000.0  # fallback quota used if the billing page scrape fails
     poll_interval_min: int = 30
-    _token_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
     _cookie_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
-
-    def token(self) -> str:
-        return self._token_plain
-
-    def set_token(self, value: str) -> None:
-        self._token_plain = value or ""
 
     def cookie(self) -> str:
         return self._cookie_plain
@@ -75,31 +63,18 @@ class AppConfig:
         except (json.JSONDecodeError, OSError):
             return cls()
         cfg = cls(
-            auth_mode=data.get("auth_mode", "user"),
-            endpoint_kind=data.get("endpoint_kind", "ai_credit"),
-            username=data.get("username", ""),
-            org=data.get("org", ""),
-            enterprise=data.get("enterprise", ""),
             monthly_quota=float(data.get("monthly_quota", 20000.0)),
-            quota_source=data.get("quota_source", "manual"),
             poll_interval_min=int(data.get("poll_interval_min", 30)),
         )
-        cfg.set_token(_decrypt(data.get("token_enc", "")))
         cfg.set_cookie(_decrypt(data.get("cookie_enc", "")))
         return cfg
 
     def save(self) -> None:
         APP_DIR.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
-        data.pop("_token_plain", None)
         data.pop("_cookie_plain", None)
-        data["token_enc"] = _encrypt(self._token_plain)
         data["cookie_enc"] = _encrypt(self._cookie_plain)
         CONFIG_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def is_valid(self) -> bool:
-        if not self.token() or not self.username:
-            return False
-        if self.auth_mode == "org" and not self.org:
-            return False
-        return True
+        return bool(self.cookie())
