@@ -152,7 +152,8 @@ class TrayApp:
         self.tray.setIcon(make_icon(snap.usage_pct, snap.color))
         tooltip = (
             f"Copilot 사용량: {snap.used:,.0f} / {snap.quota:,.0f} ({snap.usage_pct:.1f}%)\n"
-            f"상태: {snap.label} | 영업일 {snap.elapsed_bdays}/{snap.total_bdays}"
+            f"상태: {snap.label} | 영업일 {snap.elapsed_bdays}/{snap.total_bdays}\n"
+            f"업데이트: {result.last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
         )
         if result.warnings:
             tooltip += "\n⚠ " + "; ".join(result.warnings)
