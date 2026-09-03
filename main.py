@@ -131,7 +131,16 @@ class TrayApp:
         self._worker.succeeded.connect(self._thread.quit)
         self._worker.failed.connect(self._thread.quit)
         self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._on_thread_finished)
         self._thread.start()
+
+    def _on_thread_finished(self) -> None:
+        # deleteLater() only schedules destruction of the underlying C++
+        # QThread for the next event-loop pass; if this Python reference is
+        # left dangling, a refresh_now() call in between reads a
+        # already-deleted C++ object via self._thread.isRunning().
+        self._thread = None
+        self._worker = None
 
     def _on_refresh_succeeded(self, result: RefreshResult) -> None:
         self._last_result = result
@@ -163,10 +172,13 @@ def main() -> int:
 
     # Qt's default font fallback for Hangul glyphs resolves to the legacy
     # "Gulim" bitmap font on Windows instead of the modern Malgun Gothic;
-    # pin it explicitly so dialogs/menus render correctly.
-    ui_font = QFont()
-    ui_font.setFamilies(["Malgun Gothic", "Segoe UI"])
-    app.setFont(ui_font)
+    # pin it explicitly so dialogs/menus render correctly. Windows-only:
+    # these font names don't exist on macOS/Linux and just log "not found"
+    # there, where the platform default already renders Hangul correctly.
+    if sys.platform == "win32":
+        ui_font = QFont()
+        ui_font.setFamilies(["Malgun Gothic", "Segoe UI"])
+        app.setFont(ui_font)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "오류", "시스템 트레이를 사용할 수 없는 환경입니다.")

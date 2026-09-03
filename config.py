@@ -44,7 +44,6 @@ def _decrypt(stored: str) -> str:
 
 @dataclass
 class AppConfig:
-    monthly_quota: float = 20000.0  # fallback quota used if the billing page scrape fails
     poll_interval_min: int = 30
     _cookie_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
 
@@ -63,7 +62,6 @@ class AppConfig:
         except (json.JSONDecodeError, OSError):
             return cls()
         cfg = cls(
-            monthly_quota=float(data.get("monthly_quota", 20000.0)),
             poll_interval_min=int(data.get("poll_interval_min", 30)),
         )
         cfg.set_cookie(_decrypt(data.get("cookie_enc", "")))

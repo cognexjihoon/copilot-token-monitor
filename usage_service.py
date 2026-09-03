@@ -3,11 +3,9 @@ produce one refreshed snapshot + trend series per poll.
 
 GitHub's billing REST API requires the token holder to be an organization
 admin/owner to read another member's usage, which most users are not. So
-usage and quota are both obtained by scraping the rendered
-github.com/settings/billing page using the user's own session cookie
-(see scrape_client.py) - the same numbers the user would see by hand,
-just automated. `monthly_quota` in config is only a fallback used when the
-scrape fails to parse a quota value.
+usage and quota are both obtained by scraping a rendered GitHub page using
+the user's own session cookie (see scrape_client.py) - the same numbers
+the user would see by hand, just automated.
 """
 from __future__ import annotations
 
@@ -44,9 +42,7 @@ class UsageService:
 
         scraped = fetch_quota(cfg.cookie())
         used = scraped.used
-        quota = scraped.quota if scraped.quota > 0 else cfg.monthly_quota
-        if scraped.quota <= 0:
-            warnings.append(f"페이지에서 쿼터를 읽지 못해 저장된 값({cfg.monthly_quota:g})을 사용합니다.")
+        quota = scraped.quota
 
         total_bdays = business_days_in_month(year, month)
         elapsed_bdays = elapsed_business_days(year, month, today)

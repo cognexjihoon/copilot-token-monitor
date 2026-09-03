@@ -23,7 +23,6 @@ def test_config_with_cookie_is_valid():
 def test_load_missing_file_returns_defaults(tmp_path, monkeypatch):
     _point_config_at(tmp_path, monkeypatch)
     cfg = AppConfig.load()
-    assert cfg.monthly_quota == 20000.0
     assert cfg.poll_interval_min == 30
     assert cfg.cookie() == ""
 
@@ -32,7 +31,7 @@ def test_load_corrupt_json_returns_defaults(tmp_path, monkeypatch):
     config_path = _point_config_at(tmp_path, monkeypatch)
     config_path.write_text("{broken", encoding="utf-8")
     cfg = AppConfig.load()
-    assert cfg.monthly_quota == 20000.0
+    assert cfg.poll_interval_min == 30
 
 
 def test_save_then_load_round_trips_cookie_without_dpapi(tmp_path, monkeypatch):
@@ -42,14 +41,13 @@ def test_save_then_load_round_trips_cookie_without_dpapi(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_HAS_DPAPI", False)
     _point_config_at(tmp_path, monkeypatch)
 
-    cfg = AppConfig(monthly_quota=15000.0, poll_interval_min=15)
+    cfg = AppConfig(poll_interval_min=15)
     cfg.set_cookie("user_session=abc; _gh_sess=def")
     cfg.save()
 
     loaded = AppConfig.load()
 
     assert loaded.cookie() == "user_session=abc; _gh_sess=def"
-    assert loaded.monthly_quota == 15000.0
     assert loaded.poll_interval_min == 15
 
 

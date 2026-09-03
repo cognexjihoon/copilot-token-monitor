@@ -41,22 +41,24 @@ def test_refresh_builds_snapshot_from_scrape(tmp_path, monkeypatch):
     assert result.daily_series == [(fixed_today, 2595.0)]
 
 
-def test_refresh_falls_back_to_manual_quota_when_scrape_quota_missing(tmp_path, monkeypatch):
+def test_refresh_uses_scraped_quota_even_when_zero(tmp_path, monkeypatch):
+    # there's no manual fallback anymore -- whatever the scrape reports is
+    # used as-is, including the (unlikely) edge case of a zero quota; the
+    # zero-quota guard lives in UsageSnapshot.usage_pct, not here.
     _point_cache_at(tmp_path, monkeypatch)
     monkeypatch.setattr(usage_service, "date", _FixedDate(date(2026, 9, 3)))
     monkeypatch.setattr(
         usage_service, "fetch_quota", lambda cookie: ScrapedQuota(used=500.0, quota=0.0)
     )
 
-    cfg = AppConfig(monthly_quota=12345.0)
+    cfg = AppConfig()
     cfg.set_cookie("user_session=abc")
     service = UsageService(cfg)
 
     result = service.refresh()
 
-    assert result.snapshot.quota == 12345.0
-    assert len(result.warnings) == 1
-    assert "12345" in result.warnings[0] or "12,345" in result.warnings[0]
+    assert result.snapshot.quota == 0.0
+    assert result.warnings == []
 
 
 def test_refresh_propagates_scrape_error(tmp_path, monkeypatch):

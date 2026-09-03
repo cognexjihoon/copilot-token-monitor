@@ -3,7 +3,6 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QPushButton,
@@ -30,28 +29,14 @@ class SettingsDialog(QDialog):
         login_btn = QPushButton("GitHub 로그인")
         login_btn.clicked.connect(self._on_login_clicked)
 
-        self.quota_spin = QDoubleSpinBox()
-        self.quota_spin.setRange(0, 10_000_000)
-        self.quota_spin.setDecimals(0)
-        self.quota_spin.setSuffix(" credits")
-        self.quota_spin.setValue(config.monthly_quota)
-
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(5, 240)
         self.interval_spin.setSuffix(" 분")
         self.interval_spin.setValue(config.poll_interval_min)
 
-        quota_help = QLabel(
-            "위 쿼터 값은 GitHub 페이지에서 자동으로 읽지 못했을 때만 사용되는 폴백 값입니다."
-        )
-        quota_help.setWordWrap(True)
-        quota_help.setStyleSheet("color: gray; font-size: 11px;")
-
         form = QFormLayout()
         form.addRow("GitHub 계정", login_btn)
         form.addRow("", self.login_status_label)
-        form.addRow("월 한도(폴백)", self.quota_spin)
-        form.addRow("", quota_help)
         form.addRow("확인 주기", self.interval_spin)
 
         self.test_label = QLabel("")
@@ -83,7 +68,6 @@ class SettingsDialog(QDialog):
 
     def _apply_to(self, cfg: AppConfig) -> None:
         cfg.set_cookie(self._cookie)
-        cfg.monthly_quota = self.quota_spin.value()
         cfg.poll_interval_min = self.interval_spin.value()
 
     def _on_test(self) -> None:
