@@ -51,6 +51,7 @@ class TrayApp:
         self.detail_window: DetailWindow | None = None
         self._thread: QThread | None = None
         self._worker: RefreshWorker | None = None
+        self._refreshing = False
         self._last_result: RefreshResult | None = None
 
         self.tray = QSystemTrayIcon()
@@ -118,9 +119,10 @@ class TrayApp:
             self.tray.setToolTip("Copilot 사용량 모니터 - 설정이 필요합니다")
             self.status_action.setText("상태: 설정 필요")
             return
-        if self._thread is not None and self._thread.isRunning():
+        if self._refreshing:
             return  # a refresh is already in flight
 
+        self._refreshing = True
         service = UsageService(self.config)
         self._thread = QThread()
         self._worker = RefreshWorker(service)
@@ -135,10 +137,12 @@ class TrayApp:
         self._thread.start()
 
     def _on_thread_finished(self) -> None:
-        # deleteLater() only schedules destruction of the underlying C++
-        # QThread for the next event-loop pass; if this Python reference is
-        # left dangling, a refresh_now() call in between reads a
-        # already-deleted C++ object via self._thread.isRunning().
+        # _refreshing (not thread.isRunning()) is the in-flight guard so
+        # refresh_now() never touches the QThread object again here - a
+        # dangling Python reference read after deleteLater() actually runs
+        # (e.g. during a settings dialog's nested event loop) raised
+        # "QThread object already deleted".
+        self._refreshing = False
         self._thread = None
         self._worker = None
 
