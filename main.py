@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import sys
 
+import truststore
+
+# Some corporate networks intercept TLS with a proxy whose root CA is
+# installed in the OS trust store (so browsers/curl work) but not in the
+# `certifi` bundle `requests` uses by default, causing SSL verification
+# failures purely from that mismatch. Route `requests`/urllib3 through the
+# OS trust store instead so it sees the same certs a real browser does.
+truststore.inject_into_ssl()
+
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon

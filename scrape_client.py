@@ -1,11 +1,17 @@
 """Best-effort scraper for the monthly AI-credit quota shown on github.com.
 
 GitHub's billing usage API returns *usage* but never the plan's included
-*quota* (the "20,000" ceiling) - that number only exists on the rendered
-billing page (https://github.com/settings/billing), in a string like
-"2,595 / 20,000 AI credits used". This module fetches that page using a
-browser session cookie the user copies from their own logged-in browser
-(no password/2FA automation) and regex-extracts the two numbers.
+*quota* (the "20,000" ceiling) - that number only exists on a rendered
+page, in a string like "2,595 / 20,000 AI credits used". This module
+fetches that page using a browser session cookie the user copies from
+their own logged-in browser (no password/2FA automation) and
+regex-extracts the two numbers.
+
+Note: /settings/billing itself is a client-side rendered React page whose
+usage numbers load asynchronously after an XHR - they're never present in
+the initial HTML `requests` sees. /settings/copilot/features is still a
+classic server-rendered page with the "X / Y AI credit" string baked
+directly into the HTML, so that's the one this module actually fetches.
 
 This is inherently fragile: GitHub can change the markup/wording at any
 time, and the session cookie expires periodically. Callers should treat
@@ -19,7 +25,7 @@ from dataclasses import dataclass
 
 import requests
 
-BILLING_URL = "https://github.com/settings/billing"
+BILLING_URL = "https://github.com/settings/copilot/features"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
