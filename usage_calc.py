@@ -47,7 +47,7 @@ STATUS_COLOR = {
 # pace, between MARGIN and WARNING is on track, above WARNING is ahead of
 # the ideal pace.
 PACE_MARGIN_THRESHOLD = 0.80
-PACE_WARNING_THRESHOLD = 1.00
+PACE_WARNING_THRESHOLD = 1.05
 
 
 @dataclass
