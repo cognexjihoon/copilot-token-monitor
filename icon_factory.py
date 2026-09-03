@@ -1,32 +1,34 @@
-"""Draws the tray icon on the fly (colored circle + percentage) instead of
+"""Draws the tray icon on the fly (colored badge + percentage) instead of
 shipping image assets."""
 from __future__ import annotations
-
-import math
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPixmap
 
 SIZE = 64
-_MARGIN = 1  # just enough room for the antialiased edge, circle fills the rest
-_DIAMETER = SIZE - 2 * _MARGIN
-# a rectangle fits inside a circle iff its *diagonal* fits the diameter, not
-# each side independently -- checking width/height separately (the previous
-# bug) let glyph corners poke outside the circle.
-_TEXT_FIT_FACTOR = 0.94
+_MARGIN = 1  # just enough room for the antialiased edge, badge fills the rest
+_INNER = SIZE - 2 * _MARGIN
+# a slightly rounded square instead of a circle: a circle inscribed in a
+# square only covers ~79% of its area (pi/4), so at the same canvas size a
+# rounded square lets the glyph be noticeably bigger - the readability the
+# user asked for outweighs a perfectly round badge look.
+_CORNER_RADIUS = _INNER * 0.18
+# unlike fitting inside a circle (which needs a diagonal check), a
+# rectangle's width/height can be checked independently against a square.
+_TEXT_FIT_FACTOR = 0.88
 _TEXT_COLOR = QColor("#000000")
 
 
 def _max_fitting_font(text: str) -> QFont:
     """Largest bold point size whose tight bounding box still fits inside
-    the circle (by diagonal), so 1-, 2-digit and "!"/"?" glyphs are all
-    drawn as big as possible without corners overflowing the circle."""
-    limit = _DIAMETER * _TEXT_FIT_FACTOR
+    the badge, so 1-, 2-digit and "!"/"?" glyphs are all drawn as big as
+    possible."""
+    limit = _INNER * _TEXT_FIT_FACTOR
     font = QFont("Segoe UI", 1, QFont.Bold)
-    for size in range(56, 5, -1):
+    for size in range(72, 5, -1):
         font.setPointSize(size)
         rect = QFontMetrics(font).tightBoundingRect(text)
-        if math.hypot(rect.width(), rect.height()) <= limit:
+        if rect.width() <= limit and rect.height() <= limit:
             break
     return font
 
@@ -40,7 +42,7 @@ def _draw_badge(color: str, text: str) -> QIcon:
 
     painter.setBrush(QColor(color))
     painter.setPen(Qt.NoPen)
-    painter.drawEllipse(QRectF(_MARGIN, _MARGIN, _DIAMETER, _DIAMETER))
+    painter.drawRoundedRect(QRectF(_MARGIN, _MARGIN, _INNER, _INNER), _CORNER_RADIUS, _CORNER_RADIUS)
 
     painter.setFont(_max_fitting_font(text))
     painter.setPen(_TEXT_COLOR)
