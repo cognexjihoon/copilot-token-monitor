@@ -104,9 +104,15 @@ def test_status_on_track_at_exactly_100pct_of_pace():
     assert snap.status == Status.ON_TRACK
 
 
-def test_status_warning_above_100pct_of_pace():
-    # expected = 10000, used = 10400 -> ratio 1.04, ahead of ideal pace
+def test_status_on_track_within_105pct_warning_buffer():
+    # expected = 10000, used = 10400 -> ratio 1.04 <= 1.05 warning threshold
     snap = UsageSnapshot(used=10400, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.ON_TRACK
+
+
+def test_status_warning_above_105pct_of_pace():
+    # expected = 10000, used = 10600 -> ratio 1.06, ahead of the 105% buffer
+    snap = UsageSnapshot(used=10600, quota=20000, elapsed_bdays=10, total_bdays=20)
     assert snap.status == Status.WARNING
     assert snap.label == "주의"
 
