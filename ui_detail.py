@@ -24,7 +24,17 @@ from matplotlib.figure import Figure
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QStyle,
+    QStyleOptionProgressBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from usage_calc import business_days_in_month, elapsed_business_days
 from usage_service import RefreshResult
@@ -40,17 +50,29 @@ class PercentProgressBar(QProgressBar):
         self.setTextVisible(False)
 
     def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        span = max(1, self.maximum() - self.minimum())
-        chunk_width = round(self.width() * (self.value() - self.minimum()) / span)
-        if chunk_width <= 0:
-            return
-        rect = self.rect()
-        rect.setWidth(chunk_width)
+        # A previous version called super().paintEvent(event) (its own,
+        # separately opened/closed QPainter) and then opened a second
+        # QPainter(self) here for the label - two painter sessions on the
+        # same widget within one paint event. Draw the native bar and our
+        # custom label in a single QPainter session instead (the
+        # QStylePainter-based pattern Qt itself recommends for this).
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(Qt.black)
-        painter.drawText(rect, Qt.AlignCenter, f"{self.value()}%")
+
+        opt = QStyleOptionProgressBar()
+        self.initStyleOption(opt)
+        opt.text = ""
+        opt.textVisible = False
+        self.style().drawControl(QStyle.ControlElement.CE_ProgressBar, opt, painter, self)
+
+        span = max(1, self.maximum() - self.minimum())
+        chunk_width = round(self.width() * (self.value() - self.minimum()) / span)
+        if chunk_width > 0:
+            rect = self.rect()
+            rect.setWidth(chunk_width)
+            painter.setPen(Qt.black)
+            painter.drawText(rect, Qt.AlignCenter, f"{self.value()}%")
+
         painter.end()
 
 
