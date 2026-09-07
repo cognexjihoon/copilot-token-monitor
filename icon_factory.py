@@ -26,6 +26,17 @@ _TEXT_FIT_FACTOR = 0.94
 # the dark-theme value) while staying legible.
 _DARK_THEME_LIGHTNESS = 0.62
 _LIGHT_THEME_LIGHTNESS = 0.54
+# Caps saturation for the tray render only, on top of (not instead of) the
+# lightness relight above - the two axes fix two different problems.
+# DetailWindow's STATUS_COLOR values are tuned for looking clean drawn
+# flat (usage_calc.py), which for WARNING means full saturation (100%);
+# but the tray badge sits at a much higher, fixed lightness than that
+# color's own, and full saturation *there* read as glaring. Capping it
+# only here - rather than lowering STATUS_COLOR's own saturation - keeps
+# the two independently tunable instead of one fix undoing the other
+# (matches the highest saturation any *other* status color already uses,
+# so green/blue/red pass through unchanged and only pull yellow down).
+_MAX_SATURATION = 0.78
 
 
 def _system_is_dark() -> bool:
@@ -52,7 +63,7 @@ def _tray_digit_color(status_color: str) -> QColor:
     color = QColor(status_color)
     h, s, _l, a = color.getHslF()
     target_l = _DARK_THEME_LIGHTNESS if _system_is_dark() else _LIGHT_THEME_LIGHTNESS
-    color.setHslF(h if h >= 0 else 0.0, s, target_l, a)
+    color.setHslF(h if h >= 0 else 0.0, min(s, _MAX_SATURATION), target_l, a)
     return color
 
 

@@ -39,21 +39,16 @@ STATUS_LABEL = {
 STATUS_COLOR = {
     Status.MARGIN: "#2ecc71",
     Status.ON_TRACK: "#3498db",
-    # Same warm-gold hue as the earlier eye-strain fixes (~45deg), but
-    # tuned on two independent axes since the tray icon and DetailWindow
-    # consume this hex very differently:
-    #   - Lightness ~51%, matching #f1c40f's original: icon_factory.py's
-    #     tray digit ignores this value's lightness entirely (relit to a
-    #     fixed constant per theme - see _tray_digit_color), so only
-    #     DetailWindow's labels/progress bar/chart (which use this hex
-    #     as-is) are sensitive to it; too dark here reads as a muddy
-    #     ochre rather than a warning yellow (#D99B00 was ~42%).
-    #   - Saturation 78%, matching EXCEEDED's red: the tray digit DOES
-    #     carry this value through as-is (only lightness gets
-    #     overridden), and 100% saturation - notably higher than every
-    #     other status color (green 63%/blue 70%/red 78%) - made the
-    #     tray badge specifically glaring even after the lightness fix.
-    Status.WARNING: "#E4B322",
+    # This is DetailWindow's color (labels/progress bar/chart use it
+    # as-is) - full 100% saturation at ~51% lightness reads as a clean,
+    # vivid gold rather than the muddy ochre a darker/duller value gave
+    # (#D99B00 at ~42% lightness). Do NOT dial this down to fix tray
+    # glare: the tray icon needs a lower saturation than the window does
+    # to look right, so that adjustment belongs in icon_factory.py's
+    # _tray_digit_color (which already relights lightness independently)
+    # instead of here - tying both to one shared value just makes fixing
+    # one break the other.
+    Status.WARNING: "#FFC107",
     Status.EXCEEDED: "#e74c3c",
 }
 
