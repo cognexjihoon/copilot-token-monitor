@@ -65,7 +65,7 @@ def test_refresh_propagates_scrape_error(tmp_path, monkeypatch):
     _point_cache_at(tmp_path, monkeypatch)
 
     def _raise(cookie):
-        raise ScrapeError("세션 만료")
+        raise ScrapeError("세션 만료", retryable=False)
 
     monkeypatch.setattr(usage_service, "fetch_quota", _raise)
 
@@ -75,6 +75,69 @@ def test_refresh_propagates_scrape_error(tmp_path, monkeypatch):
 
     with pytest.raises(ScrapeError):
         service.refresh()
+
+
+def test_refresh_does_not_retry_non_retryable_errors(tmp_path, monkeypatch):
+    _point_cache_at(tmp_path, monkeypatch)
+    calls = []
+
+    def _raise(cookie):
+        calls.append(cookie)
+        raise ScrapeError("세션 만료", retryable=False)
+
+    monkeypatch.setattr(usage_service, "fetch_quota", _raise)
+
+    cfg = AppConfig()
+    cfg.set_cookie("user_session=expired")
+    service = UsageService(cfg, retry_delay_sec=0)
+
+    with pytest.raises(ScrapeError):
+        service.refresh()
+
+    assert len(calls) == 1  # no retries for a failure that retrying can't fix
+
+
+def test_refresh_retries_transient_errors_then_succeeds(tmp_path, monkeypatch):
+    _point_cache_at(tmp_path, monkeypatch)
+    monkeypatch.setattr(usage_service, "date", _FixedDate(date(2026, 9, 3)))
+    calls = []
+
+    def _flaky(cookie):
+        calls.append(cookie)
+        if len(calls) < 3:
+            raise ScrapeError("일시적 오류")  # retryable by default
+        return ScrapedQuota(used=100.0, quota=1000.0)
+
+    monkeypatch.setattr(usage_service, "fetch_quota", _flaky)
+
+    cfg = AppConfig()
+    cfg.set_cookie("user_session=abc")
+    service = UsageService(cfg, retry_delay_sec=0)
+
+    result = service.refresh()
+
+    assert len(calls) == 3
+    assert result.snapshot.used == 100.0
+
+
+def test_refresh_gives_up_after_max_retries(tmp_path, monkeypatch):
+    _point_cache_at(tmp_path, monkeypatch)
+    calls = []
+
+    def _always_fails(cookie):
+        calls.append(cookie)
+        raise ScrapeError("계속 실패")  # retryable by default
+
+    monkeypatch.setattr(usage_service, "fetch_quota", _always_fails)
+
+    cfg = AppConfig()
+    cfg.set_cookie("user_session=abc")
+    service = UsageService(cfg, retry_delay_sec=0)
+
+    with pytest.raises(ScrapeError):
+        service.refresh()
+
+    assert len(calls) == usage_service.MAX_FETCH_RETRIES + 1
 
 
 def test_update_daily_cache_computes_deltas_from_cumulative_readings(tmp_path, monkeypatch):

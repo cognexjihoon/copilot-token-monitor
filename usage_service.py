@@ -9,14 +9,22 @@ the user would see by hand, just automated.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Tuple
 
 from config import AppConfig
-from scrape_client import ScrapeError, fetch_quota
+from scrape_client import ScrapeError, ScrapedQuota, fetch_quota
 from usage_calc import UsageSnapshot, business_days_in_month, elapsed_business_days
 from usage_cache import load_cache, save_cache, set_day
+
+# One initial attempt plus up to this many retries for a *retryable*
+# ScrapeError (network blip, half-rendered page, transient 5xx) - a
+# non-retryable one (expired/missing session) is never worth retrying and
+# is raised straight away instead, see ScrapeError.retryable.
+MAX_FETCH_RETRIES = 3
+RETRY_DELAY_SEC = 2.0
 
 
 @dataclass
@@ -28,19 +36,20 @@ class RefreshResult:
 
 
 class UsageService:
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, *, retry_delay_sec: float = RETRY_DELAY_SEC):
         self.config = config
+        self._retry_delay_sec = retry_delay_sec
 
     def refresh(self) -> RefreshResult:
         cfg = self.config
         if not cfg.is_valid():
-            raise ScrapeError("설정이 완료되지 않았습니다. 설정 창에서 GitHub 로그인을 진행하세요.")
+            raise ScrapeError("설정이 완료되지 않았습니다. 설정 창에서 GitHub 로그인을 진행하세요.", retryable=False)
 
         today = date.today()
         year, month = today.year, today.month
         warnings: List[str] = []
 
-        scraped = fetch_quota(cfg.cookie())
+        scraped = self._fetch_quota_with_retry(cfg.cookie())
         used = scraped.used
         quota = scraped.quota
 
@@ -56,6 +65,17 @@ class UsageService:
             last_updated=datetime.now(),
             warnings=warnings,
         )
+
+    def _fetch_quota_with_retry(self, cookie: str) -> ScrapedQuota:
+        attempts = MAX_FETCH_RETRIES + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                return fetch_quota(cookie)
+            except ScrapeError as exc:
+                if not exc.retryable or attempt == attempts:
+                    raise
+                time.sleep(self._retry_delay_sec)
+        raise AssertionError("unreachable")  # loop always returns or raises
 
     def _update_daily_cache(
         self, year: int, month: int, today: date, used_month_to_date: float

@@ -36,7 +36,16 @@ _PATTERN = re.compile(r"([\d,]+)\s*/\s*([\d,]+)\s*AI\s*credit", re.IGNORECASE)
 
 
 class ScrapeError(RuntimeError):
-    pass
+    """`retryable` distinguishes transient hiccups (network blip, a
+    half-rendered page, a momentary 5xx) - worth a few automatic retries and
+    safe to mask behind the last known value if they keep failing - from
+    failures that retrying can never fix (no/expired session): those need
+    to reach the user immediately instead of being silently retried or
+    hidden behind stale data."""
+
+    def __init__(self, message: str, *, retryable: bool = True):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass
@@ -50,7 +59,7 @@ def fetch_quota(cookie_header: str) -> ScrapedQuota:
     for github.com (copy from DevTools > Network > any github.com request),
     e.g. "user_session=...; _gh_sess=...; ..."."""
     if not cookie_header:
-        raise ScrapeError("세션 쿠키가 설정되지 않았습니다.")
+        raise ScrapeError("세션 쿠키가 설정되지 않았습니다.", retryable=False)
 
     try:
         resp = requests.get(
@@ -63,7 +72,9 @@ def fetch_quota(cookie_header: str) -> ScrapedQuota:
         raise ScrapeError(f"네트워크 오류: {exc}") from exc
 
     if resp.status_code in (401, 403) or "/login" in resp.url:
-        raise ScrapeError("로그인 세션이 만료되었습니다. 브라우저에서 다시 로그인 후 쿠키를 갱신하세요.")
+        raise ScrapeError(
+            "로그인 세션이 만료되었습니다. 브라우저에서 다시 로그인 후 쿠키를 갱신하세요.", retryable=False
+        )
     if not resp.ok:
         raise ScrapeError(f"페이지 요청 실패 ({resp.status_code})")
 

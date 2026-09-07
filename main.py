@@ -28,8 +28,11 @@ from usage_service import RefreshResult, UsageService
 # (e.g. a blocking network call spanning a sleep/wake cycle can wait far
 # past its own requests.get(timeout=...) because the whole process - and
 # the clock that timeout is measured against - was suspended too) rather
-# than trusted to eventually finish on its own.
-WATCHDOG_TIMEOUT_MS = 60_000
+# than trusted to eventually finish on its own. Sized to comfortably fit
+# UsageService's own retries (up to 4 attempts x 20s request timeout, plus
+# the delay between them) so a legitimately-retrying refresh isn't mistaken
+# for a stuck one.
+WATCHDOG_TIMEOUT_MS = 100_000
 
 
 class RefreshWorker(QObject):
@@ -207,6 +210,13 @@ class TrayApp:
             self.detail_window.update_result(result)
 
     def _on_refresh_failed(self, message: str) -> None:
+        # UsageService already retried transient failures (network blip,
+        # half-loaded page, momentary 5xx) a few times internally before
+        # this ever fires - so once we get here, retrying further silently
+        # or trusting a stale last-known value isn't safe: the user could
+        # keep burning tokens against a number that's actually out of
+        # date (e.g. an expired session masked behind old data). Always
+        # surface the failure immediately instead.
         self.tray.setIcon(make_error_icon())
         self.tray.setToolTip(f"Copilot 사용량 모니터 - 오류: {message}")
         self.status_action.setText("상태: 오류 (설정/토큰 확인)")

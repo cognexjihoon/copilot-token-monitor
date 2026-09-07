@@ -18,6 +18,7 @@ def test_fetch_quota_requires_cookie():
         assert False, "expected ScrapeError"
     except ScrapeError as exc:
         assert "쿠키" in str(exc)
+        assert exc.retryable is False
 
 
 def test_fetch_quota_parses_comma_formatted_numbers(monkeypatch):
@@ -79,6 +80,7 @@ def test_fetch_quota_no_match_raises_scrape_error(monkeypatch):
         assert False, "expected ScrapeError"
     except ScrapeError as exc:
         assert "찾지 못했습니다" in str(exc)
+        assert exc.retryable is True  # worth retrying: could be a half-rendered page
 
 
 def test_fetch_quota_expired_session_via_status_code(monkeypatch):
@@ -91,6 +93,7 @@ def test_fetch_quota_expired_session_via_status_code(monkeypatch):
         assert False, "expected ScrapeError"
     except ScrapeError as exc:
         assert "만료" in str(exc)
+        assert exc.retryable is False  # retrying can't revive an expired session
 
 
 def test_fetch_quota_expired_session_via_login_redirect(monkeypatch):
@@ -105,6 +108,7 @@ def test_fetch_quota_expired_session_via_login_redirect(monkeypatch):
         assert False, "expected ScrapeError"
     except ScrapeError as exc:
         assert "만료" in str(exc)
+        assert exc.retryable is False
 
 
 def test_fetch_quota_non_ok_status_raises(monkeypatch):
