@@ -39,7 +39,17 @@ STATUS_LABEL = {
 STATUS_COLOR = {
     Status.MARGIN: "#2ecc71",
     Status.ON_TRACK: "#3498db",
-    Status.WARNING: "#D99B00",
+    # Same warm-orange hue as the earlier eye-strain fix (#D99B00), but
+    # with lightness put back up near the original #f1c40f's ~50% instead
+    # of that attempt's ~42%. icon_factory.py's tray digit ignores this
+    # value's lightness entirely (it relights to a fixed constant per
+    # theme - see _tray_digit_color), so the tray was never affected by
+    # that drop; DetailWindow's labels/progress bar/chart use this hex
+    # as-is, where a saturated color that dark reads as a muddy
+    # ochre/mustard rather than a warning yellow. #FFC107 (Material
+    # Design's "Amber 500") keeps the calmer, less-glaring hue while
+    # staying legible used flat.
+    Status.WARNING: "#FFC107",
     Status.EXCEEDED: "#e74c3c",
 }
 
