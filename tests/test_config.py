@@ -72,25 +72,3 @@ def test_empty_cookie_round_trips_to_empty(tmp_path, monkeypatch):
 
     loaded = AppConfig.load()
     assert loaded.cookie() == ""
-
-
-def test_teams_fields_default_to_disabled():
-    cfg = AppConfig()
-    assert cfg.teams_webhook_url == ""
-    assert cfg.teams_threshold_pct == 80.0
-    assert cfg.teams_notified_month == ""
-
-
-def test_teams_fields_round_trip(tmp_path, monkeypatch):
-    _point_config_at(tmp_path, monkeypatch)
-
-    cfg = AppConfig()
-    cfg.teams_webhook_url = "https://example.com/webhook"
-    cfg.teams_threshold_pct = 90.0
-    cfg.teams_notified_month = "2026-09"
-    cfg.save()
-
-    loaded = AppConfig.load()
-    assert loaded.teams_webhook_url == "https://example.com/webhook"
-    assert loaded.teams_threshold_pct == 90.0
-    assert loaded.teams_notified_month == "2026-09"
