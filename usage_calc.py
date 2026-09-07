@@ -39,7 +39,7 @@ STATUS_LABEL = {
 STATUS_COLOR = {
     Status.MARGIN: "#2ecc71",
     Status.ON_TRACK: "#3498db",
-    Status.WARNING: "#f1c40f",
+    Status.WARNING: "#D99B00",
     Status.EXCEEDED: "#e74c3c",
 }
 
