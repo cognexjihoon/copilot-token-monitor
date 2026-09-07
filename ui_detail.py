@@ -2,24 +2,16 @@ from __future__ import annotations
 
 import sys
 from datetime import date
-from pathlib import Path
 
 import matplotlib
-from matplotlib import font_manager
 
 matplotlib.use("QtAgg")
 # DejaVu Sans (matplotlib's default) has no Hangul glyphs and silently
-# renders them as tofu boxes. Prefer the same bundled Pretendard the rest
-# of the app uses (see main.py's _load_app_font) so the chart's axis/legend
-# text matches the UI; matplotlib doesn't see fonts Qt registered via
-# QFontDatabase, so it needs its own addfont() call here. Falls back to
-# whatever Korean font each OS ships with if the bundled file is missing.
-_ASSET_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-_pretendard_regular = _ASSET_ROOT / "assets" / "fonts" / "Pretendard-Regular.ttf"
-if _pretendard_regular.exists():
-    font_manager.fontManager.addfont(str(_pretendard_regular))
-    _korean_font = "Pretendard"
-elif sys.platform == "win32":
+# renders them as tofu boxes, so pick the font each OS actually ships with
+# Korean coverage. Listing all three unconditionally made matplotlib log a
+# "not found" warning per platform-inappropriate name (e.g. AppleGothic on
+# Windows, Malgun Gothic on macOS).
+if sys.platform == "win32":
     _korean_font = "Malgun Gothic"
 elif sys.platform == "darwin":
     _korean_font = "Apple SD Gothic Neo"

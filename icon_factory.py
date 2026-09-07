@@ -61,13 +61,7 @@ def _max_fitting_font(text: str) -> QFont:
     the canvas, so 1-, 2-digit and "!"/"?" glyphs are all drawn as big as
     possible."""
     limit = _INNER * _TEXT_FIT_FACTOR
-    # "Pretendard" is registered app-wide in main.py's _load_app_font();
-    # naming it here (rather than leaving Qt to fall back to the default
-    # UI font) keeps the tray digit's numerals visually consistent with
-    # the rest of the app. If it's ever unavailable (e.g. this module gets
-    # imported before QFontDatabase.addApplicationFont runs), Qt silently
-    # substitutes the platform default - no crash.
-    font = QFont("Pretendard", 1, QFont.Bold)
+    font = QFont("Segoe UI", 1, QFont.Bold)
     for size in range(72, 5, -1):
         font.setPointSize(size)
         rect = QFontMetrics(font).tightBoundingRect(text)

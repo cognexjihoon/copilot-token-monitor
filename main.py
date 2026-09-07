@@ -3,7 +3,6 @@ AI-credit usage against a monthly quota, paced by business days."""
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import truststore
 
@@ -15,7 +14,7 @@ import truststore
 truststore.inject_into_ssl()
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QFont, QFontDatabase
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from config import AppConfig
@@ -24,12 +23,6 @@ from scrape_client import ScrapeError
 from ui_detail import DetailWindow
 from ui_settings import SettingsDialog
 from usage_service import RefreshResult, UsageService
-
-# _MEIPASS: when frozen into a onefile PyInstaller build, bundled data
-# (--add-data) is unpacked next to the executable under this temp dir
-# instead of living beside this .py file.
-_ASSET_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-FONT_DIR = _ASSET_ROOT / "assets" / "fonts"
 
 # A refresh that's still "in flight" after this long is treated as stuck
 # (e.g. a blocking network call spanning a sleep/wake cycle can wait far
@@ -231,32 +224,19 @@ class TrayApp:
             self.detail_window.show_error(message)
 
 
-def _load_app_font() -> QFont:
-    """Bundles Pretendard (assets/fonts/, SIL OFL) and registers it as the
-    app-wide font instead of leaning on whatever CJK font each OS happens
-    to pick as a fallback - that used to resolve to the legacy bitmap
-    "Gulim" on Windows rather than the modern Malgun Gothic. Bundling one
-    font file also means Korean and English UI text render identically
-    across machines regardless of what's installed there.
-    Falls back to the platform default if the files are missing (e.g. a
-    packaging step that forgot to bundle assets/)."""
-    families: set[str] = set()
-    for filename in ("Pretendard-Regular.ttf", "Pretendard-Bold.ttf"):
-        path = FONT_DIR / filename
-        if not path.exists():
-            continue
-        font_id = QFontDatabase.addApplicationFont(str(path))
-        if font_id != -1:
-            families.update(QFontDatabase.applicationFontFamilies(font_id))
-    if families:
-        return QFont(next(iter(families)))
-    return QFont()
-
-
 def main() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    app.setFont(_load_app_font())
+
+    # Qt's default font fallback for Hangul glyphs resolves to the legacy
+    # "Gulim" bitmap font on Windows instead of the modern Malgun Gothic;
+    # pin it explicitly so dialogs/menus render correctly. Windows-only:
+    # these font names don't exist on macOS/Linux and just log "not found"
+    # there, where the platform default already renders Hangul correctly.
+    if sys.platform == "win32":
+        ui_font = QFont()
+        ui_font.setFamilies(["Malgun Gothic", "Segoe UI"])
+        app.setFont(ui_font)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "오류", "시스템 트레이를 사용할 수 없는 환경입니다.")
