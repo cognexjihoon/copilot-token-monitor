@@ -45,6 +45,13 @@ def _decrypt(stored: str) -> str:
 @dataclass
 class AppConfig:
     poll_interval_min: int = 30
+    teams_webhook_url: str = ""
+    teams_threshold_pct: float = 80.0
+    # "YYYY-MM" of the month a threshold-crossing notification was already
+    # sent for, so a poll loop running every `poll_interval_min` doesn't
+    # re-notify every cycle while usage stays above the threshold; cleared
+    # once usage drops back below it (see UsageService._maybe_notify_teams).
+    teams_notified_month: str = ""
     _cookie_plain: str = field(default="", repr=False, compare=False)  # only used in-memory
 
     def cookie(self) -> str:
@@ -63,6 +70,9 @@ class AppConfig:
             return cls()
         cfg = cls(
             poll_interval_min=int(data.get("poll_interval_min", 30)),
+            teams_webhook_url=data.get("teams_webhook_url", ""),
+            teams_threshold_pct=float(data.get("teams_threshold_pct", 80.0)),
+            teams_notified_month=data.get("teams_notified_month", ""),
         )
         cfg.set_cookie(_decrypt(data.get("cookie_enc", "")))
         return cfg

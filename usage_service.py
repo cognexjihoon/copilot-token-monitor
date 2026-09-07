@@ -14,8 +14,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Tuple
 
+import requests
+
 from config import AppConfig
 from scrape_client import ScrapeError, ScrapedQuota, fetch_quota
+from teams_notifier import send_teams_message
 from usage_calc import UsageSnapshot, business_days_in_month, elapsed_business_days
 from usage_cache import load_cache, save_cache, set_day
 
@@ -58,6 +61,7 @@ class UsageService:
         snapshot = UsageSnapshot(used=used, quota=quota, elapsed_bdays=elapsed_bdays, total_bdays=total_bdays)
 
         daily_series = self._update_daily_cache(year, month, today, used)
+        self._maybe_notify_teams(snapshot, today)
 
         return RefreshResult(
             snapshot=snapshot,
@@ -76,6 +80,42 @@ class UsageService:
                     raise
                 time.sleep(self._retry_delay_sec)
         raise AssertionError("unreachable")  # loop always returns or raises
+
+    def _maybe_notify_teams(self, snapshot: UsageSnapshot, today: date) -> None:
+        """Sends a one-time-per-month Teams notification once usage crosses
+        the configured threshold. Fires at most once per calendar month
+        (tracked via cfg.teams_notified_month, persisted so a restart
+        doesn't re-notify) rather than on every poll while still over the
+        threshold; re-arms itself if usage ever dips back below it (e.g.
+        the org bumped the quota) so a later re-crossing notifies again.
+        A send failure is swallowed - a notification hiccup must never
+        break the refresh itself."""
+        cfg = self.config
+        if not cfg.teams_webhook_url:
+            return
+
+        month_key = f"{today.year:04d}-{today.month:02d}"
+        if snapshot.usage_pct < cfg.teams_threshold_pct:
+            if cfg.teams_notified_month:
+                cfg.teams_notified_month = ""
+                cfg.save()
+            return
+
+        if cfg.teams_notified_month == month_key:
+            return
+
+        try:
+            send_teams_message(
+                cfg.teams_webhook_url,
+                "⚠ Copilot 사용량 경고",
+                f"사용량이 {snapshot.usage_pct:.1f}%로 임계치({cfg.teams_threshold_pct:.0f}%)를 초과했습니다.\n"
+                f"{snapshot.used:,.0f} / {snapshot.quota:,.0f} credits",
+            )
+        except requests.RequestException:
+            return
+
+        cfg.teams_notified_month = month_key
+        cfg.save()
 
     def _update_daily_cache(
         self, year: int, month: int, today: date, used_month_to_date: float
