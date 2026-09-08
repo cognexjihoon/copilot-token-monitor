@@ -30,8 +30,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
-    QStyle,
-    QStyleOptionProgressBar,
     QVBoxLayout,
     QWidget,
 )
@@ -50,20 +48,23 @@ class PercentProgressBar(QProgressBar):
         self.setTextVisible(False)
 
     def paintEvent(self, event) -> None:
-        # A previous version called super().paintEvent(event) (its own,
-        # separately opened/closed QPainter) and then opened a second
-        # QPainter(self) here for the label - two painter sessions on the
-        # same widget within one paint event. Draw the native bar and our
-        # custom label in a single QPainter session instead (the
-        # QStylePainter-based pattern Qt itself recommends for this).
+        # Let QProgressBar draw the native chunk itself via its own
+        # paintEvent/QStylePainter, rather than calling
+        # style().drawControl(CE_ProgressBar, ...) manually from here. On
+        # Windows' native (Vista) style the progress chunk is driven by an
+        # internal QStyleAnimation timer that assumes it owns the normal
+        # paint path; invoking drawControl() by hand from inside our own
+        # already-open QPainter session raced with that timer's own
+        # repaint and crashed the app ("recursive repaint detected" /
+        # "QBackingStore::endPaint() called with active painter").
+        # setTextVisible(False) in __init__ keeps super() from drawing its
+        # own centered-on-the-whole-bar text, so only our label below
+        # draws - in a second, separate painter session opened after the
+        # native paint has fully finished.
+        super().paintEvent(event)
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-
-        opt = QStyleOptionProgressBar()
-        self.initStyleOption(opt)
-        opt.text = ""
-        opt.textVisible = False
-        self.style().drawControl(QStyle.ControlElement.CE_ProgressBar, opt, painter, self)
 
         span = max(1, self.maximum() - self.minimum())
         chunk_width = round(self.width() * (self.value() - self.minimum()) / span)
