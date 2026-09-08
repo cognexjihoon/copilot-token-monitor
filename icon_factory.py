@@ -37,6 +37,7 @@ _LIGHT_THEME_LIGHTNESS = 0.54
 # (matches the highest saturation any *other* status color already uses,
 # so green/blue/red pass through unchanged and only pull yellow down).
 _MAX_SATURATION = 0.78
+_SKULL = "\U0001F480"  # 💀
 
 
 def _system_is_dark() -> bool:
@@ -109,9 +110,39 @@ def _draw_badge(color: str, text: str) -> QIcon:
     return QIcon(pixmap)
 
 
+def _draw_exceeded_badge() -> QIcon:
+    """Quota fully gone gets a skull instead of a tinted digit/"!" - and
+    unlike _draw_badge, drawn with plain drawText() (native color-emoji
+    glyph) rather than QPainterPath.addText() filled with one flat color.
+    Two reasons: a skull's own black/bone-white artwork already reads on
+    both light and dark taskbars without us picking one tint that might
+    vanish on one of them (STATUS_COLOR's flat black for this status
+    would relight to *gray* through _tray_digit_color's usual per-theme
+    lightness treatment, defeating the point); and color/COLR emoji
+    glyphs generally can't be captured as a single fillable vector
+    outline the way a plain digit can."""
+    pixmap = QPixmap(SIZE, SIZE)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    font = _max_fitting_font(_SKULL)
+    ink = QFontMetrics(font).tightBoundingRect(_SKULL)
+    x = SIZE / 2 - ink.width() / 2 - ink.left()
+    y = SIZE / 2 - ink.height() / 2 - ink.top()
+
+    painter.setFont(font)
+    painter.drawText(QPointF(x, y), _SKULL)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
 def make_icon(pct: float, color: str) -> QIcon:
-    text = f"{int(min(pct, 99))}" if pct < 100 else "!"
-    return _draw_badge(color, text)
+    if pct >= 100:
+        return _draw_exceeded_badge()
+    return _draw_badge(color, f"{int(min(pct, 99))}")
 
 
 def make_error_icon() -> QIcon:

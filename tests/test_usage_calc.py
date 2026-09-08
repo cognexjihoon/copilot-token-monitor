@@ -117,9 +117,42 @@ def test_status_warning_above_105pct_of_pace():
     assert snap.label == "주의"
 
 
+def test_status_danger_above_120pct_of_pace():
+    # expected = 10000, used = 12100 -> ratio 1.21, past the 120% danger threshold
+    snap = UsageSnapshot(used=12100, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.DANGER
+    assert snap.color == "#E67E22"
+    assert snap.label == "위험"
+
+
+def test_status_warning_stays_below_120pct_danger_threshold():
+    # expected = 10000, used = 12000 -> ratio 1.20, still within warning
+    snap = UsageSnapshot(used=12000, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.WARNING
+
+
+def test_status_critical_at_90pct_of_quota_even_if_pace_looks_fine():
+    # usage_pct = 90%, but pace_ratio is on track (not >1.20) -- CRITICAL
+    # must still fire since it's an absolute-usage check independent of
+    # pace (e.g. late in the month, when expected_used has caught up).
+    snap = UsageSnapshot(used=18000, quota=20000, elapsed_bdays=18, total_bdays=20)
+    assert snap.pace_ratio == pytest.approx(1.0)
+    assert snap.status == Status.CRITICAL
+    assert snap.color == "#E74C3C"
+    assert snap.label == "임박"
+
+
+def test_status_critical_takes_priority_over_danger():
+    # both usage_pct >= 90 and pace_ratio > 1.20 are true -- CRITICAL wins
+    # (closer to actually running out is treated as more urgent).
+    snap = UsageSnapshot(used=18500, quota=20000, elapsed_bdays=10, total_bdays=20)
+    assert snap.status == Status.CRITICAL
+
+
 def test_status_exceeded_takes_priority_over_pace():
     snap = UsageSnapshot(used=20000, quota=20000, elapsed_bdays=1, total_bdays=20)
     assert snap.status == Status.EXCEEDED
+    assert snap.color == "#000000"
     assert snap.label == "초과"
 
 
