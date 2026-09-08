@@ -23,7 +23,6 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -41,40 +40,45 @@ from usage_service import RefreshResult
 class PercentProgressBar(QProgressBar):
     """Draws the "N%" label centered within the filled chunk only, instead
     of Qt's default of centering it across the whole (mostly empty at low
-    values) bar."""
+    values) bar.
+
+    Two earlier versions did this by hand-painting the label inside a
+    custom paintEvent - first via style().drawControl(CE_ProgressBar,...)
+    plus text in one QPainter session, then via super().paintEvent()
+    followed by a second QPainter session for just the text - and both
+    crashed on Windows with "recursive repaint detected" / "QBackingStore
+    ::endPaint() called with active painter". Windows' native (Vista)
+    style drives the progress chunk with its own internal QStyleAnimation
+    timer, and *any* extra hand-rolled painting inside this widget's own
+    paintEvent - even one that lets super() draw the chunk first - can
+    still race with that timer's own repaint.
+
+    This version never touches paintEvent at all: the label is a real
+    child widget, repositioned/resized to match the chunk's current
+    geometry whenever the value or the bar's own size changes. Both the
+    native chunk and this label are then painted through Qt's ordinary,
+    animation-safe widget compositing instead of anything we drive by
+    hand, so there is nothing left to race with that timer.
+    """
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setTextVisible(False)
+        self._label = QLabel(self)
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet("color: black; background: transparent;")
+        self._label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.valueChanged.connect(self._sync_label)
 
-    def paintEvent(self, event) -> None:
-        # Let QProgressBar draw the native chunk itself via its own
-        # paintEvent/QStylePainter, rather than calling
-        # style().drawControl(CE_ProgressBar, ...) manually from here. On
-        # Windows' native (Vista) style the progress chunk is driven by an
-        # internal QStyleAnimation timer that assumes it owns the normal
-        # paint path; invoking drawControl() by hand from inside our own
-        # already-open QPainter session raced with that timer's own
-        # repaint and crashed the app ("recursive repaint detected" /
-        # "QBackingStore::endPaint() called with active painter").
-        # setTextVisible(False) in __init__ keeps super() from drawing its
-        # own centered-on-the-whole-bar text, so only our label below
-        # draws - in a second, separate painter session opened after the
-        # native paint has fully finished.
-        super().paintEvent(event)
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._sync_label()
 
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
+    def _sync_label(self, *_args) -> None:
         span = max(1, self.maximum() - self.minimum())
         chunk_width = round(self.width() * (self.value() - self.minimum()) / span)
-        if chunk_width > 0:
-            rect = self.rect()
-            rect.setWidth(chunk_width)
-            painter.setPen(Qt.black)
-            painter.drawText(rect, Qt.AlignCenter, f"{self.value()}%")
-
-        painter.end()
+        self._label.setGeometry(0, 0, chunk_width, self.height())
+        self._label.setText(f"{self.value()}%" if chunk_width > 0 else "")
 
 
 class DetailWindow(QDialog):
