@@ -47,6 +47,21 @@ python main.py
 
 설정과 사용량 캐시는 `%APPDATA%\CopilotUsageMonitor\`에 저장됩니다(`config.json`, `usage_cache.json`). 세션 쿠키는 Windows DPAPI로 암호화되어 저장됩니다.
 
+## Windows 재부팅 후 자동 실행
+
+PowerShell에서 프로젝트 폴더를 현재 디렉터리로 둔 뒤 아래 명령을 실행하면, 현재 Windows 사용자로 로그인할 때마다 `.venv` 환경의 `main.py`가 시스템 트레이 프로그램으로 실행됩니다. 작업 스케줄러에 등록되므로 재부팅 후에도 유지되며, 프로그램이 비정상 종료되면 최대 3회 재시작합니다.
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\install_startup.ps1
+```
+
+자동 실행을 해제하려면 다음 명령을 실행합니다.
+
+```powershell
+.\scripts\uninstall_startup.ps1
+```
+
 ## 테스트
 
 ```powershell
